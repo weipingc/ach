@@ -552,6 +552,9 @@ type ValidateOpts struct {
 
 	// CheckTransactionCode ... // TODO(adam):
 	CheckTransactionCode func(code int) error
+
+	// CustomTraceNumbers ... // TODO(adam):
+	CustomTraceNumbers bool `json:"customTraceNumbers"`
 }
 
 // ValidateWith performs NACHA format rule checks on each record according to their specification
