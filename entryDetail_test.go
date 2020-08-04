@@ -20,6 +20,8 @@ package ach
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -735,5 +737,38 @@ func TestEntryDetail__ParseNOC(t *testing.T) {
 	}
 	if entries[0].Category != CategoryNOC {
 		t.Errorf("EntryDetail.Category=%s\n  %#v", entries[0].Category, entries[0])
+	}
+}
+
+func TestEntryDetail__SetValidation(t *testing.T) {
+	ed := mockEntryDetail()
+	ed.SetValidation(&ValidateOpts{
+		CheckTransactionCode: func(code int) error {
+			if code == 999 {
+				return nil
+			}
+			return fmt.Errorf("unexpected TransactionCode: %d", code)
+		},
+	})
+	ed.TransactionCode = 999
+	if err := ed.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	// nil out
+	ed = nil
+	ed.SetValidation(&ValidateOpts{})
+}
+
+func TestEntryDetail__LargeAmountStrings(t *testing.T) {
+	ed := mockEntryDetail()
+	ed.Amount = math.MaxInt64
+
+	if err := ed.Validate(); err == nil {
+		t.Error("expected error")
+	} else {
+		if !strings.Contains(err.Error(), "Amount 9223372036854775807 does not match formatted value 6854775807") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	}
 }
