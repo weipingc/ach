@@ -262,6 +262,44 @@ func TestWEBDebitRead(t *testing.T) {
 	testWEBDebitRead(t)
 }
 
+func BenchmarkBigFile(b *testing.B) {
+	b.ReportAllocs()
+
+	create := func() {
+		file := mockFilePPD()
+
+		header := mockBatchPPDHeader()
+		batch, err := NewBatch(header)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		for i := 0; i < 75_000; i++ {
+			entry := mockPPDEntryDetail()
+			entry.SetTraceNumber(mockBatchPPDHeader().ODFIIdentification, i)
+
+			batch.AddEntry(entry)
+			batch.GetHeader().BatchNumber = i
+			batch.GetControl().BatchNumber = i
+		}
+
+		if err := batch.Create(); err != nil {
+			b.Fatal(err)
+		}
+
+		file.AddBatch(batch)
+
+		err = file.Create()
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	for i := 0; i < b.N; i++ {
+		create()
+	}
+}
+
 // BenchmarkWEBDebitRead benchmarks validating reading a WEB debit
 func BenchmarkWEBDebitRead(b *testing.B) {
 	b.ReportAllocs()
