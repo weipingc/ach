@@ -1044,8 +1044,11 @@ func segmentFileBatchAddADVEntry(creditBatch Batcher, debitBatch Batcher, entry 
 	}
 }
 
-// FlattenBatches flattens the file's batches by consolidating batches with the same BatchHeader data into one Batch.
-func (f *File) FlattenBatches() (*File, error) {
+type FlattenBatchesOpts struct {
+	ExposeErrors bool
+}
+
+func (f *File) FlattenBatchesWith(opts *FlattenBatchesOpts) (*File, error) {
 	out := NewFile()
 
 	// Helper method to fetch the batch header without the trace number
@@ -1103,12 +1106,17 @@ func (f *File) FlattenBatches() (*File, error) {
 
 	// Set batches to valid state
 	wg := sync.WaitGroup{}
+	doneCh := make(chan struct{}, 1)
+	errCh := make(chan error, 1)
 
 	wg.Add(len(batchesByHeader))
+
 	for _, b := range batchesByHeader {
 		go func(b Batcher) {
 			defer wg.Done()
-			_ = b.Create()
+			if err := b.Create(); err != nil {
+				errCh <- err
+			}
 		}(b)
 	}
 
@@ -1116,11 +1124,29 @@ func (f *File) FlattenBatches() (*File, error) {
 	for _, b := range IATBatchesByHeader {
 		go func(b IATBatch) {
 			defer wg.Done()
-			_ = b.Create()
+			if err := b.Create(); err != nil {
+				errCh <- err
+			}
 		}(*b)
 	}
 
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	// Block til we're done creating batches or an error occurs
+selectLoop:
+	for {
+		select {
+		case <-doneCh:
+			break selectLoop
+		case err := <-errCh:
+			if opts.ExposeErrors {
+				return nil, fmt.Errorf("creating batch: %w", err)
+			}
+		}
+	}
 
 	// Add FileHeaderData.
 	f.addFileHeaderData(out)
@@ -1131,7 +1157,13 @@ func (f *File) FlattenBatches() (*File, error) {
 	if err := out.Validate(); err != nil {
 		return nil, err
 	}
+
 	return out, nil
+}
+
+// FlattenBatches flattens the file's batches by consolidating batches with the same BatchHeader data into one Batch.
+func (f *File) FlattenBatches() (*File, error) {
+	return f.FlattenBatchesWith(nil)
 }
 
 //Validates that the batch numbers are ascending

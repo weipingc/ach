@@ -1903,6 +1903,34 @@ func TestFile__FlattenMicroDeposits(t *testing.T) {
 	}
 }
 
+func TestFile__FlattenBatchesWithExposeErrors(t *testing.T) {
+	// open a file for reading. Any io.Reader Can be used
+	f, err := os.Open(filepath.Join("test", "testdata", "flattenBatchesOneBatchHeader.ach"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewReader(f)
+	achFile, err := r.Read()
+	if err != nil {
+		t.Fatalf("reading file: %+v \n", err)
+	}
+	// Set non-existent ServiceClassCode
+	achFile.Batches[0].GetHeader().ServiceClassCode = 999
+
+	// Swallow errors
+	_, err = achFile.FlattenBatchesWith(&FlattenBatchesOpts{ExposeErrors: false})
+	if err != nil {
+		t.Fatalf("unexpected error: %+v \n", err)
+	}
+
+	// Expose errors
+	_, err = achFile.FlattenBatchesWith(&FlattenBatchesOpts{ExposeErrors: true})
+	if err == nil {
+		t.Fatalf("expected invalid Service Class Code error")
+	}
+}
+
 func TestFile__SetValidation(t *testing.T) {
 	file, err := readACHFilepath(filepath.Join("test", "testdata", "web-debit.ach"))
 	if err != nil {
